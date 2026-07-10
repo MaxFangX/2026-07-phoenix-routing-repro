@@ -209,7 +209,26 @@ succeeds.
 
 ## Running the repro
 
-### eclair side (the actual reproduction)
+With [`just`](https://github.com/casey/just) installed:
+
+```bash
+# The actual reproduction: shallow-clones eclair at the pinned commit,
+# drops in the spec, and runs it. Requires JDK 21+ (set JAVA_HOME).
+just repro
+
+# LDK-side commands (require Rust):
+just ldk-baseline   # LDK finds an in-budget route for the failed invoice
+just ldk-lexe-node  # Lexe LSP channels, policies, scorer liquidity estimates
+just ldk-two-hop    # ACINQ -> peer -> Lexe paths, eclair-style fee accounting
+just ldk <args>     # any graph-debug subcommand, e.g. `just ldk stats`
+```
+
+Key `just repro` output: the `prod-first-attempt` cases (the config eclair
+actually uses for a payment's first attempt) print `NO ROUTE` for every
+amount, while the `inspect k-shortest candidate paths` case prints the five
+candidates and their full-amount fees.
+
+### Manual: eclair side
 
 Requires JDK 21 and a checkout of [ACINQ/eclair](https://github.com/ACINQ/eclair)
 (tested at master `7fb9460`, 2026-07-08):
@@ -221,12 +240,7 @@ LEXE_GRAPH_CSV=<this-repo>/data/graph.csv \
   ./mvnw -pl eclair-core test -Dsuites='fr.acinq.eclair.router.LexeGraphDebugSpec'
 ```
 
-Key output: the `prod-first-attempt` cases (the config eclair actually uses
-for a payment's first attempt) print `NO ROUTE` for every amount, while the
-`inspect k-shortest candidate paths` case prints the five candidates and their
-full-amount fees.
-
-### LDK side (graph inspection & baseline)
+### Manual: LDK side
 
 Requires Rust (any recent stable). From the repo root:
 
