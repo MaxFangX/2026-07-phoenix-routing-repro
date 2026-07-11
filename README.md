@@ -21,6 +21,12 @@ budget, which makes the remaining margin tighter than the divergence between
 "minimum weight" and "minimum fee" — so the deterministic first attempt always
 busts the budget and the payment always fails.
 
+**Update 2026-07-11**: the 0.3% fee turned out to be stale channel state on
+Lexe's side and has been fixed — new Lexe invoices advertise a 0-fee payment
+path (see [the postscript](#postscript-the-03-fee-and-the-lexe-side-fix-2026-07-11)).
+The eclair findings below stand on their own: even at 0.3%, the fee budget
+admitted several routes, and the payment should never have failed.
+
 ## Repository contents
 
 ```
@@ -205,7 +211,38 @@ make this class of failure recoverable.
 **Lexe** (mitigation, no upstream dependency): lower the fee advertised in
 blinded paths / route hints. At 0.1%, even the worst-ranked candidate path
 above totals well under the budget, so eclair's deterministic first attempt
-succeeds.
+succeeds. *Done 2026-07-11 — the advertised fee is now 0; see the postscript
+below.*
+
+## Postscript: the 0.3% fee, and the Lexe-side fix (2026-07-11)
+
+The advertised 0.3% turned out to be stale state, not intent. Lexe had lowered
+its configured LSP → user forwarding fee from 3000 ppm to 0 back in April
+2026 — but in LDK, a channel's config is fixed at open, so changing the default
+only affects *new* channels, and Lexe's migration path for existing channels
+was disabled in production. The recipient's oldest channel (opened September
+2025) still carried 3000 ppm. A Lexe node advertises the **max** fee across the
+LSP's currently-configured fee and each existing channel's last
+`channel_update`, so that single stale channel poisoned every invoice this
+recipient generated — while users with only post-April channels advertised 0
+and were unaffected. (The max is there because a channel's stored config is
+what its owner nominally enforces; the fix had to be applied on the LSP side
+rather than in the advertisement.)
+
+On 2026-07-11, Lexe migrated all remaining stale channels to 0 ppm. Newly
+generated BOLT11 invoices and BOLT12 invoices now
+advertise a 0-fee payment path, handing eclair the full 0.4% trampoline budget:
+every candidate path fits with wide margin, so this failure mode is gone for
+payments to Lexe wallets regardless of any eclair-side change.
+
+One more data point for the eclair analysis: on 2026-07-11, *before* the fix,
+an identical 350k sat payment against a 0.3% invoice **succeeded**. The first
+attempt is deterministic *given* ACINQ's graph and balance-estimate state, but
+that state evolves continuously — so with a squeezed budget, the failure
+presents in the wild as recipient-specific flakiness rather than a hard outage.
+The snapshot in `data/` reproduces the failing state. Any recipient whose
+final-hop fee leaves the sender less margin than the fee spread among eclair's
+top-weight candidates can still trip this.
 
 ## Running the repro
 
